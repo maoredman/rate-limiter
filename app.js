@@ -1,21 +1,29 @@
 const Koa = require('koa');
-const redis = require("redis");
-const { promisify } = require("util");
+const redis = require('redis');
+const { promisify } = require('util');
 
 const PORT = 3000;
 const LIMIT_REQUESTS_PER_MIN = 60;
-const app = new Koa();
 
-redisConfig = {host: "127.0.0.1", port: "6379", password: ""};
-const redisClient = redis.createClient(redisConfig);
-redisClient.on("error", function(error) {
-  console.error(error);
-});
-const redisGet = promisify(redisClient.get).bind(redisClient);
+if (!module.parent) {
+    const app = new Koa();
 
-app.use(async function(ctx) {
+    redisConfig = {host: '127.0.0.1', port: '6379'};
+    const redisClient = redis.createClient(redisConfig);
+    redisClient.on('error', function(error) {
+        console.error(error);
+    });
+
+    app.use(ctx => handleRequest(ctx, redisClient));
+
+    app.listen(PORT);
+    console.log('Server started on port ' + PORT);
+}
+
+async function handleRequest(ctx, redisClient) {
     const redisKey = `${ctx.ip}:${new Date().getMinutes()}`;
 
+    const redisGet = promisify(redisClient.get).bind(redisClient);
     const limitReached = await redisGet(redisKey)
         .then((reply) => {
             if (reply == LIMIT_REQUESTS_PER_MIN) {
@@ -26,7 +34,7 @@ app.use(async function(ctx) {
             console.error(error);
         });
     if (limitReached) {
-        ctx.body = "Error";
+        ctx.body = 'Error';
         return;
     }
 
@@ -42,7 +50,7 @@ app.use(async function(ctx) {
             console.error(error);
         });
     ctx.body = requestCount;
-});
+}
 
-app.listen(PORT);
-console.log("Server started on port " + PORT);
+exports.LIMIT_REQUESTS_PER_MIN = LIMIT_REQUESTS_PER_MIN;
+exports.handleRequest = handleRequest;
